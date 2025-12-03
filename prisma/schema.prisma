@@ -1,0 +1,47 @@
+// prisma/schema.prisma
+// 数据库 Schema 设计
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" // 或使用 mysql, sqlite
+  url      = env("DATABASE_URL")
+}
+
+// 绘图记录表
+model Drawing {
+  id          String   @id @default(cuid())
+  name        String   // 图表名称
+  description String?  // 图表描述
+  data        Json     // Excalidraw 数据(JSON格式)
+  thumbnail   String?  // 缩略图URL
+  userId      String?  // 用户ID(如果有用户系统)
+  tags        String[] // 标签数组
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // 版本历史
+  versions    DrawingVersion[]
+  
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// 版本历史表 - 保存每次修改的历史记录
+model DrawingVersion {
+  id         String   @id @default(cuid())
+  drawingId  String
+  drawing    Drawing  @relation(fields: [drawingId], references: [id], onDelete: Cascade)
+  
+  data       Json     // 该版本的完整数据
+  version    Int      // 版本号
+  comment    String?  // 版本说明
+  
+  createdAt  DateTime @default(now())
+  
+  @@index([drawingId])
+  @@index([createdAt])
+}
