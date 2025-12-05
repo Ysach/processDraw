@@ -1,0 +1,38 @@
+[
+  {
+    "id": 1,
+    "name": "电脑票",
+    "diagrams": [
+      {
+        "id": 1,
+        "name": "终端投注",
+        "createdAt": "2025-12-01",
+        "content": "{\"example\":\"data\"}"
+      },
+      {
+        "id": 2,
+        "name": "终端销售",
+        "createdAt": "2025-12-01",
+        "content": "{\"example\":\"data\"}"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "name": "即开票",
+    "diagrams": [
+      {
+        "id": 1,
+        "name": "即开票兑奖",
+        "createdAt": "2025-12-01",
+        "content": "{\"example\":\"data\"}"
+      },
+      {
+        "id": 2,
+        "name": "即开票销售",
+        "createdAt": "2025-12-01",
+        "content": "{\"example\":\"data\"}"
+      }
+    ]
+  }
+]
