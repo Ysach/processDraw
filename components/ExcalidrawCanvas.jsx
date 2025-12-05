@@ -147,7 +147,7 @@ export default function ExcalidrawCanvas({ elements, onChange, showNotification 
   }, []);
 
   return (
-    <div className="w-full h-[calc(100vh-64px)]">
+    <div className="w-full h-[calc(100vh-0px)]">
       <Excalidraw
         key={canvasKey}
         excalidrawAPI={(api) => setExcalidrawAPI(api)}

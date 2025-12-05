@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import AppHeader from '@/components/AppHeader';
 import dynamic from 'next/dynamic';
 import FloatingChat from '@/components/FloatingChat';
 import FloatingCodeEditor from '@/components/FloatingCodeEditor';
+import Sidebar from '@/components/Sidebar';
 import ConfigManager from '@/components/ConfigManager';
 import ContactModal from '@/components/ContactModal';
 import HistoryModal from '@/components/HistoryModal';
@@ -15,6 +16,7 @@ import { configService } from '@/lib/config-service';
 import { useEngine } from '@/hooks/useEngine';
 import { drawioProcessor, excalidrawProcessor } from '@/lib/code-processor';
 
+
 // Dynamically import Canvas components to avoid SSR issues
 const DrawioCanvas = dynamic(() => import('@/components/DrawioCanvas'), {
   ssr: false,
@@ -23,6 +25,8 @@ const DrawioCanvas = dynamic(() => import('@/components/DrawioCanvas'), {
 const ExcalidrawCanvas = dynamic(() => import('@/components/ExcalidrawCanvas'), {
   ssr: false,
 });
+
+
 
 export default function DrawPage() {
   // 引擎类型状态（核心状态）
@@ -59,9 +63,77 @@ export default function DrawPage() {
     message: '',
     type: 'info'
   });
+  
+  // 绘图状态
+  const [currentDrawingId, setCurrentDrawingId] = useState(null);
+  const [currentDrawingName, setCurrentDrawingName] = useState(null);
+  const excalidrawRef = useRef(null);
+
+  // 处理加载绘图
+  const handleLoadDrawing = async (drawingId, drawingName, content) => {
+    setCurrentDrawingId(drawingId);
+    setCurrentDrawingName(drawingName);
+    
+    if (excalidrawRef && excalidrawRef.current) {
+      // 清空当前画布
+      excalidrawRef.current.clearCanvas();
+      
+      // 加载新的绘图内容
+      try {
+        const parsedContent = JSON.parse(content);
+        if (parsedContent.elements && parsedContent.elements.length > 0) {
+          excalidrawRef.current.updateScene(parsedContent);
+        }
+      } catch (error) {
+        console.error('Failed to parse drawing content:', error);
+      }
+    }
+  };
+
+  // 处理创建新绘图
+  const handleCreateDrawing = async (drawingId, drawingName) => {
+    setCurrentDrawingId(drawingId);
+    setCurrentDrawingName(drawingName);
+    
+    // 清空当前画布
+    if (excalidrawRef && excalidrawRef.current) {
+      excalidrawRef.current.clearCanvas();
+    }
+  };
+  
+  // 侧边栏图点击处理
+  const handleDiagramClick = useCallback(async (diagram, projectId) => {
+    console.log('Diagram clicked:', diagram, 'Project ID:', projectId);
+    // 加载选中的图
+    if (diagram && projectId) {
+      try {
+        // 向API传递projectId和diagramId获取绘图数据
+        const response = await fetch(`/api/projects/${projectId}/diagrams/${diagram.id}`);
+        if (response.ok) {
+          const drawingData = await response.json();
+          // 使用API返回的数据加载绘图
+          handleLoadDrawing(diagram.id, diagram.name, drawingData.content);
+        } else {
+          console.error('Failed to load drawing from API:', response.status);
+          // 如果API失败，使用本地mock数据作为备用
+          if (diagram.content) {
+            handleLoadDrawing(diagram.id, diagram.name, diagram.content);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading drawing from API:', error);
+        // 异常处理：使用本地mock数据作为备用
+        if (diagram.content) {
+          handleLoadDrawing(diagram.id, diagram.name, diagram.content);
+        }
+      }
+    }
+  }, [handleLoadDrawing]);
 
   // Chat面板宽度（用于调整画布padding）
   const [chatPanelWidth, setChatPanelWidth] = useState(0);
+  // 侧边栏相关状态
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // 清空悬浮代码编辑器缓存和内容（在引擎切换时调用）
   const clearFloatingCodeCache = useCallback(() => {
@@ -365,6 +437,7 @@ export default function DrawPage() {
       // Excalidraw需要解析JSON为elements
       return (
         <ExcalidrawCanvas
+          ref={excalidrawRef}
           elements={excalidrawElements}
           showNotification={showNotification}
           onChange={(newElements) => {
@@ -381,6 +454,12 @@ export default function DrawPage() {
             } catch (error) {
               console.error('Failed to serialize Excalidraw elements:', error);
             }
+          }}
+          drawingId={currentDrawingId}
+          drawingName={currentDrawingName}
+          onDrawingSaved={(id, name) => {
+            setCurrentDrawingId(id);
+            setCurrentDrawingName(name);
           }}
         />
       );
@@ -411,90 +490,90 @@ export default function DrawPage() {
   };
 
   return (
-    // <div className="flex flex-col h-screen bg-gray-50" style={{ paddingRight: chatPanelWidth || 0 }}>
-    <div className="flex flex-col h-screen bg-gray-50" style={{ paddingRight: 0 }}>
-      {/* Header */}
-      <AppHeader />
+    <div className="flex h-screen bg-gray-50">
+      {/* Sidebar */}
+      {isSidebarOpen && <Sidebar onDiagramClick={handleDiagramClick} />}
 
-      {/* Main Content - Full Screen Canvas */}
-      <div className="flex-1 overflow-hidden">
-        {renderCanvas()}
+      {/* Main Content */}
+      <div className="flex flex-col flex-1 overflow-hidden">
+        {/* Header */}
+        {/* <AppHeader /> */} 
+
+        {/* Main Content - Canvas */}
+        <div className="flex-1 overflow-hidden">
+          {renderCanvas()}
+        </div>
+
+        {/* Floating Chat */}
+        <FloatingChat
+          engineType={engineType}
+          onEngineSwitch={handleEngineSwitch}
+          onSendMessage={handleSendMessage}
+          onRetryMessage={handleRetryMessage}
+          onApplyCode={handleChatApplyCode}
+          isGenerating={engine.isGenerating}
+          messages={engine.messages}
+          streamingContent={engine.streamingContent} // ✨ 传递流式内容
+          onNewChat={handleNewChat}
+          conversationId={engine.conversationId}
+          onOpenHistory={() => setIsHistoryModalOpen(true)}
+          onOpenSettings={() => setIsCombinedSettingsOpen(true)}
+        />
+
+        {/* Floating Code Editor */}
+        <FloatingCodeEditor
+          engineType={engineType}
+          onApplyCode={handleEditorApplyCode}
+          processCode={processCode}
+          messages={engine.messages}
+        />
+
+
+
+        {/* History Modal */}
+        <HistoryModal
+          isOpen={isHistoryModalOpen}
+          onClose={() => setIsHistoryModalOpen(false)}
+          onApply={handleApplyHistory}
+          editorType={engineType}
+        />
+
+        {/* Combined Settings Modal */}
+        <CombinedSettingsModal
+          isOpen={isCombinedSettingsOpen}
+          onClose={() => setIsCombinedSettingsOpen(false)}
+          usePassword={usePassword}
+          currentConfig={config}
+          onConfigSelect={(newConfig) => {
+            setConfig(newConfig);
+          }}
+        />
+
+        {/* Contact Modal */}
+        <ContactModal
+          isOpen={isContactModalOpen}
+          onClose={() => setIsContactModalOpen(false)}
+        />
+
+        {/* Notification */}
+        <Notification
+          isOpen={notification.isOpen}
+          onClose={closeNotification}
+          title={notification.title}
+          message={notification.message}
+          type={notification.type}
+        />
+
+        {/* Confirm Dialog */}
+        <ConfirmDialog
+          isOpen={confirmDialog.isOpen}
+          onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+          onConfirm={confirmDialog.onConfirm}
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          type={confirmDialog.type}
+        />
       </div>
-
-      {/* Floating Chat */}
-      <FloatingChat
-        engineType={engineType}
-        onEngineSwitch={handleEngineSwitch}
-        onSendMessage={handleSendMessage}
-        onRetryMessage={handleRetryMessage}
-        onApplyCode={handleChatApplyCode}
-        isGenerating={engine.isGenerating}
-        messages={engine.messages}
-        streamingContent={engine.streamingContent} // ✨ 传递流式内容
-        onNewChat={handleNewChat}
-        conversationId={engine.conversationId}
-        onOpenHistory={() => setIsHistoryModalOpen(true)}
-        onOpenSettings={() => setIsCombinedSettingsOpen(true)}
-      />
-
-      {/* Floating Code Editor */}
-      <FloatingCodeEditor
-        engineType={engineType}
-        onApplyCode={handleEditorApplyCode}
-        processCode={processCode}
-        messages={engine.messages}
-      />
-
-      {/* Config Manager Modal */}
-      <ConfigManager
-        isOpen={isConfigManagerOpen}
-        onClose={() => setIsConfigManagerOpen(false)}
-        onConfigSelect={(selectedConfig) => setConfig(selectedConfig)}
-      />
-
-      {/* History Modal */}
-      <HistoryModal
-        isOpen={isHistoryModalOpen}
-        onClose={() => setIsHistoryModalOpen(false)}
-        onApply={handleApplyHistory}
-        editorType={engineType}
-      />
-
-      {/* Combined Settings Modal */}
-      <CombinedSettingsModal
-        isOpen={isCombinedSettingsOpen}
-        onClose={() => setIsCombinedSettingsOpen(false)}
-        usePassword={usePassword}
-        currentConfig={config}
-        onConfigSelect={(newConfig) => {
-          setConfig(newConfig);
-        }}
-      />
-
-      {/* Contact Modal */}
-      <ContactModal
-        isOpen={isContactModalOpen}
-        onClose={() => setIsContactModalOpen(false)}
-      />
-
-      {/* Notification */}
-      <Notification
-        isOpen={notification.isOpen}
-        onClose={closeNotification}
-        title={notification.title}
-        message={notification.message}
-        type={notification.type}
-      />
-
-      {/* Confirm Dialog */}
-      <ConfirmDialog
-        isOpen={confirmDialog.isOpen}
-        onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
-        onConfirm={confirmDialog.onConfirm}
-        title={confirmDialog.title}
-        message={confirmDialog.message}
-        type={confirmDialog.type}
-      />
     </div>
   );
 }
